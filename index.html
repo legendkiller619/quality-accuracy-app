@@ -1,0 +1,229 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Quality Accuracy Tracker</title>
+    <!-- Use Tailwind CSS for easy styling -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* Custom font for a clean look */
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap');
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f3f4f6;
+        }
+
+        .container {
+            max-width: 90%;
+        }
+
+        .table-input {
+            width: 100%;
+            text-align: center;
+            background-color: #f9fafb;
+            border: 1px solid #e5e7eb;
+            border-radius: 0.375rem;
+            padding: 0.5rem;
+        }
+    </style>
+</head>
+<body class="bg-gray-100 flex items-center justify-center min-h-screen p-4">
+
+    <div class="container bg-white shadow-xl rounded-lg p-8">
+        <h1 class="text-3xl font-bold text-center mb-6 text-gray-800">Quality Accuracy Tracker & Forecast</h1>
+        <p class="text-center text-gray-600 mb-8">Enter your daily data to track monthly accuracy and forecast next day's audit volume to meet the 95% target.</p>
+
+        <div class="overflow-x-auto rounded-lg shadow-sm mb-6">
+            <table id="data-table" class="min-w-full divide-y divide-gray-200">
+                <thead class="bg-gray-50">
+                    <tr>
+                        <th class="px-3 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">Date</th>
+                        <th class="px-3 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">Vols Processed</th>
+                        <th class="px-3 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">Vols Audited</th>
+                        <th class="px-3 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">Defect</th>
+                        <th class="px-3 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">Pass</th>
+                        <th class="px-3 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">Accuracy %</th>
+                    </tr>
+                </thead>
+                <tbody class="bg-white divide-y divide-gray-200">
+                    <!-- Rows will be added dynamically by JavaScript -->
+                </tbody>
+            </table>
+        </div>
+
+        <div class="flex justify-center mb-6">
+            <button id="summary-button" class="bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 px-6 rounded-full shadow-md transition duration-300 ease-in-out transform hover:scale-105">
+                Get Summary
+            </button>
+        </div>
+
+        <div id="results" class="bg-gray-50 rounded-lg p-6 shadow-inner text-gray-700 hidden">
+            <h2 class="text-xl font-bold mb-4 text-gray-800">Monthly Performance Summary</h2>
+            <div class="flex flex-col md:flex-row md:space-x-8">
+                <p><strong>Overall Monthly Accuracy:</strong> <span id="overall-accuracy" class="text-lg font-bold text-blue-600"></span></p>
+                <p><strong>Total Audited:</strong> <span id="total-audited" class="text-lg font-bold text-blue-600"></span></p>
+                <p><strong>Total Passed:</strong> <span id="total-passed" class="text-lg font-bold text-blue-600"></span></p>
+            </div>
+
+            <div id="forecast-section" class="mt-4 p-4 border-t border-gray-200 hidden">
+                <p class="text-red-600 font-semibold text-lg mb-2">⚠ Action Required: Target Not Met!</p>
+                <p class="mb-2">Based on your current defect rate, you need to audit **<span id="forecast-number" class="text-red-600 text-lg font-bold"></span>** transactions tomorrow to bring the overall accuracy to 95%.</p>
+                <p class="text-sm text-gray-500">
+                    This forecast is an estimate and assumes a consistent defect rate.
+                </p>
+            </div>
+
+            <div id="target-met-section" class="mt-4 p-4 border-t border-gray-200 hidden">
+                <p class="text-green-600 font-semibold text-lg mb-2">🎉 Target Met!</p>
+                <p class="mb-2">Your current monthly accuracy is already at or above the 95% target.</p>
+            </div>
+
+            <div id="impossible-section" class="mt-4 p-4 border-t border-gray-200 hidden">
+                <p class="text-red-600 font-semibold text-lg mb-2">⚠ Impossible to Reach!</p>
+                <p class="mb-2">Your average defect rate is too high to achieve the 95% target by simply auditing more volumes. A change in process is required.</p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // --- HTML Element References ---
+        const dataTableBody = document.querySelector('#data-table tbody');
+        const summaryButton = document.getElementById('summary-button');
+        const resultsDiv = document.getElementById('results');
+        const overallAccuracySpan = document.getElementById('overall-accuracy');
+        const totalAuditedSpan = document.getElementById('total-audited');
+        const totalPassedSpan = document.getElementById('total-passed');
+        const forecastSection = document.getElementById('forecast-section');
+        const targetMetSection = document.getElementById('target-met-section');
+        const impossibleSection = document.getElementById('impossible-section');
+        const forecastNumberSpan = document.getElementById('forecast-number');
+
+        // --- Constants ---
+        const NUM_ROWS = 31;
+        const TARGET_ACCURACY = 0.95;
+
+        /**
+         * Initializes the table with input fields for each row.
+         */
+        function initializeTable() {
+            for (let i = 0; i < NUM_ROWS; i++) {
+                const row = dataTableBody.insertRow();
+                row.innerHTML = `
+                        <td class="p-2"><input type="text" class="table-input" placeholder="Day ${i + 1}" data-col="date"></td>
+                        <td class="p-2"><input type="number" class="table-input" placeholder="0" data-col="vols-processed"></td>
+                        <td class="p-2"><input type="number" class="table-input" placeholder="0" data-col="vols-audited"></td>
+                        <td class="p-2"><input type="number" class="table-input" placeholder="0" data-col="defect"></td>
+                        <td class="p-2"><input type="number" class="table-input" placeholder="0" data-col="pass"></td>
+                        <td class="p-2"><input type="text" class="table-input text-gray-500 font-mono" readonly data-col="accuracy" value="0.00%"></td>
+                    `;
+            }
+
+            // Attach event listeners to all 'pass' and 'vols-audited' inputs for real-time accuracy calculation
+            dataTableBody.querySelectorAll('input[data-col="pass"], input[data-col="vols-audited"]').forEach(input => {
+                input.addEventListener('input', calculateRowAccuracy);
+            });
+
+            // Attach event listeners to all 'defect' and 'pass' inputs for real-time pass calculation
+            dataTableBody.querySelectorAll('input[data-col="defect"], input[data-col="vols-audited"]').forEach(input => {
+                input.addEventListener('input', calculateRowPass);
+            });
+        }
+
+        /**
+         * Calculates the 'Accuracy %' for a specific row based on 'Pass' and 'Vols Audited'.
+         * @param {Event} event The input event object.
+         */
+        function calculateRowAccuracy(event) {
+            const row = event.target.closest('tr');
+            const volsAudited = parseFloat(row.querySelector('input[data-col="vols-audited"]').value) || 0;
+            const pass = parseFloat(row.querySelector('input[data-col="pass"]').value) || 0;
+            const accuracyInput = row.querySelector('input[data-col="accuracy"]');
+
+            if (volsAudited > 0) {
+                const accuracy = (pass / volsAudited) * 100;
+                accuracyInput.value = `${accuracy.toFixed(2)}%`;
+            } else {
+                accuracyInput.value = '0.00%';
+            }
+        }
+
+        /**
+         * Calculates the 'Pass' for a specific row based on 'Vols Audited' and 'Defect'.
+         * @param {Event} event The input event object.
+         */
+        function calculateRowPass(event) {
+            const row = event.target.closest('tr');
+            const volsAudited = parseFloat(row.querySelector('input[data-col="vols-audited"]').value) || 0;
+            const defect = parseFloat(row.querySelector('input[data-col="defect"]').value) || 0;
+            const passInput = row.querySelector('input[data-col="pass"]');
+
+            if (volsAudited > 0) {
+                const pass = volsAudited - defect;
+                passInput.value = pass;
+            } else {
+                passInput.value = '0';
+            }
+        }
+
+        /**
+         * Handles the summary button click event. Calculates overall accuracy and forecast.
+         */
+        function handleSummary() {
+            let totalAudited = 0;
+            let totalPassed = 0;
+            let totalDefects = 0;
+
+            // Collect data from the table
+            const rows = dataTableBody.querySelectorAll('tr');
+            rows.forEach(row => {
+                const audited = parseFloat(row.querySelector('input[data-col="vols-audited"]').value) || 0;
+                const passed = parseFloat(row.querySelector('input[data-col="pass"]').value) || 0;
+                const defect = parseFloat(row.querySelector('input[data-col="defect"]').value) || 0;
+
+                totalAudited += audited;
+                totalPassed += passed;
+                totalDefects += defect;
+            });
+
+            // Calculate overall monthly accuracy
+            const overallAccuracy = totalAudited > 0 ? (totalPassed / totalAudited) : 0;
+            overallAccuracySpan.textContent = `${(overallAccuracy * 100).toFixed(2)}%`;
+            totalAuditedSpan.textContent = totalAudited;
+            totalPassedSpan.textContent = totalPassed;
+
+            // Show the results section
+            resultsDiv.classList.remove('hidden');
+            forecastSection.classList.add('hidden');
+            targetMetSection.classList.add('hidden');
+            impossibleSection.classList.add('hidden');
+
+            // Determine if a forecast is needed
+            if (overallAccuracy < TARGET_ACCURACY) {
+                const avgDefectRate = totalAudited > 0 ? (totalDefects / totalAudited) : 0;
+
+                // Forecast logic based on Goal Seek
+                // Formula: X >= (0.95 * Total Audited - Total Passes) / (0.05 - Avg Defect Rate)
+                const denominator = (0.05 - avgDefectRate);
+
+                if (denominator <= 0) {
+                    // Cannot reach target by auditing more, defect rate is too high
+                    impossibleSection.classList.remove('hidden');
+                } else {
+                    const forecast = Math.ceil((TARGET_ACCURACY * totalAudited - totalPassed) / denominator);
+                    forecastNumberSpan.textContent = Math.max(0, forecast); // Ensure forecast is not negative
+                    forecastSection.classList.remove('hidden');
+                }
+            } else {
+                targetMetSection.classList.remove('hidden');
+            }
+        }
+
+        // --- Event Listeners ---
+        document.addEventListener('DOMContentLoaded', initializeTable);
+        summaryButton.addEventListener('click', handleSummary);
+    </script>
+
+</body>
+</html>
